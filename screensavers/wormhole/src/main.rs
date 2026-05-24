@@ -203,28 +203,12 @@ fn run_hyperspace<B: ratatui::backend::Backend>(
             let area = f.area();
             let buf = f.buffer_mut();
 
-            // 1. Draw swirling hyperspace background tunnel
+            // 1. Clear background to solid black
             for y in 0..area.height {
-                let dy = y as f32 - center_y;
                 for x in 0..area.width {
-                    let dx = (x as f32 - center_x) * 0.55;
-                    let dist = (dx * dx + dy * dy).sqrt();
-
                     let cell = &mut buf[(x, y)];
                     cell.set_symbol(" ");
-
-                    // Concentric swirling warp tunnel
-                    let angle = dy.atan2(dx);
-                    let wave = ((dist * 0.28 - time * 8.5) + angle * 2.2).sin();
-
-                    if wave > 0.45 {
-                        let scale = (wave - 0.45) * 1.82; // 0.0 to 1.0
-                        let bg_g = (scale * 28.0) as u8;
-                        let bg_b = (12.0 + scale * 52.0) as u8;
-                        cell.set_style(Style::default().bg(Color::Rgb(0, bg_g, bg_b)));
-                    } else {
-                        cell.set_style(Style::default().bg(Color::Black));
-                    }
+                    cell.set_style(Style::default().bg(Color::Black));
                 }
             }
 
