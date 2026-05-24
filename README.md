@@ -71,8 +71,8 @@ Design assets are licensed under Creative Commons BY-SA 4.0 unless otherwise spe
 See the other repositories in the [omara-labs](https://github.com/omara-labs) organization:
 
 - [omara-os](https://github.com/omara-labs/omara-os)
-- [omara-core](https://github.com/omara-labs/omara-core)
-- [omara-de](https://github.com/omara-labs/omara-de)
+- [omara-cli](https://github.com/omara-labs/omara-cli)
+- [omara-configs](https://github.com/omara-labs/omara-configs)
 - [omara-apps](https://github.com/omara-labs/omara-apps)
 - [omara-rpms](https://github.com/omara-labs/omara-rpms)
 
