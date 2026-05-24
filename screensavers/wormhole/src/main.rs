@@ -1,5 +1,5 @@
-// omara-wormhole - Fully self-contained Star Trek / Star Wars warp speed screensaver.
-// Clean star warp streaks against solid black space, logo cockpit vibration, and planet-to-planet hyperspace journey.
+// omara-wormhole - Fully self-contained space travel screensaver.
+// Spaceship with OMARA logo cruising at sublight speed and transitioning into warp speed.
 
 use crossterm::{
     event::{self, Event},
@@ -15,72 +15,43 @@ use std::io;
 use std::time::{Duration, Instant};
 use rand::Rng;
 
-// === BRANDING ===
-pub const DEFAULT_ART: &str = include_str!("../../../assets/brand/omara.txt");
-
-pub fn load_branding() -> String {
-    if let Some(config_dir) = dirs::config_dir() {
-        let user_path = config_dir.join("omara/branding/screensaver.txt");
-        if user_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&user_path) {
-                if !content.trim().is_empty() {
-                    return content;
-                }
-            }
-        }
-    }
-    DEFAULT_ART.to_string()
-}
-
 struct TunnelStar {
     x: f32,
     y: f32,
     z: f32,
 }
 
-// Compact, clean ASCII planets representing space destinations
-const PLANETS: &[&[&str]] = &[
-    &[
-        r"          .------.          ",
-        r"        .-' .--. '-.        ",
-        r"      ./  ./    \.  \.      ",
-        r"   ===|  |        |  |===   ",
-        r"      '\  '\    /'  /'      ",
-        r"        '-. '--' .-'        ",
-        r"           '------'         ",
-    ],
-    &[
-        r"         .------.         ",
-        r"       .-'  ()  '-.       ",
-        r"      /  ()    ()  \      ",
-        r"     |              |     ",
-        r"     |   ()    ()   |     ",
-        r"      \            /      ",
-        r"       '-.______.-'       ",
-    ],
-    &[
-        r"         .------.         ",
-        r"       .-'  ~~  '-.       ",
-        r"      /  ~~    ~   \      ",
-        r"     |  ~  ~~~~     |     ",
-        r"     |   ~~~~~      |     ",
-        r"      \    ~       /      ",
-        r"       '-.______.-'       ",
-    ],
+struct FlameParticle {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    life: f32,
+}
+
+// Third-person rear view of the OMARA spaceship
+const SHIP_ART: &[&str] = &[
+    r"         /\         ",
+    r"        /  \        ",
+    r"       /    \       ",
+    r"     .-'      '-.   ",
+    r"    /   OMARA    \  ",
+    r"   |  .-.____.-.  | ",
+    r"   |  |  ||||  |  | ",
+    r"   '-/ \_/\_/\_/ \-'",
+    r"     \  | | | |  /  ",
+    r"      '-'-'-'-'-'   ",
 ];
 
-const PLANET_COLORS: &[Color] = &[
-    Color::Rgb(240, 155, 30),  // Orange ringed gas giant
-    Color::Rgb(150, 150, 150), // Grey cratered rocky moon
-    Color::Rgb(0, 180, 240),   // Cyan/blue ocean planet
-];
+const SHIP_WIDTH: u16 = 20;
+const SHIP_HEIGHT: u16 = 10;
 
 #[derive(PartialEq, Clone, Copy)]
 enum WarpPhase {
-    Arrived,
-    HyperspaceEntry,
-    HyperspaceCruising,
-    HyperspaceExit,
+    SublightCruise,
+    WarpEngage,
+    WarpCruising,
+    WarpExit,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -92,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     execute!(terminal.backend_mut(), crossterm::cursor::Hide)?;
 
-    let result = run_starways_warp(&mut terminal);
+    let result = run_spaceship_warp(&mut terminal);
 
     execute!(
         terminal.backend_mut(),
@@ -109,27 +80,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run_starways_warp<B: ratatui::backend::Backend>(
+fn run_spaceship_warp<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let logo = load_branding();
-    let logo_lines: Vec<&str> = logo.lines().collect();
-    let logo_height = logo_lines.len() as u16;
-    let logo_width = logo_lines.iter().map(|l| l.chars().count()).max().unwrap_or(56) as u16;
-
     let mut rng = rand::rng();
 
     let mut stars: Vec<TunnelStar> = Vec::new();
+    let mut flames: Vec<FlameParticle> = Vec::new();
 
-    // Hyperspace journey state machine
-    let mut phase = WarpPhase::Arrived;
+    // Journey state machine
+    let mut phase = WarpPhase::SublightCruise;
     let mut phase_timer = Instant::now();
     let mut current_speed;
-    let mut planet_idx = 0;
-
-    let mut planet_x = 0.0f32;
-    let mut planet_y = 0.0f32;
-    let mut planet_target_y = 0.0f32;
 
     let mut last_frame = Instant::now();
     let start_time = Instant::now();
@@ -162,6 +124,7 @@ fn run_starways_warp<B: ratatui::backend::Backend>(
         // Initialize / Resize handling
         if width != last_width || height != last_height {
             stars.clear();
+            flames.clear();
 
             let target_stars = (width as usize * 3 / 2).clamp(60, 200);
             for _ in 0..target_stars {
@@ -174,11 +137,6 @@ fn run_starways_warp<B: ratatui::backend::Backend>(
                 });
             }
 
-            // Align planet on left side
-            planet_x = (width as f32 * 0.10).clamp(2.0, 15.0);
-            planet_target_y = height as f32 / 2.0 - 3.5;
-            planet_y = planet_target_y;
-
             last_width = width;
             last_height = height;
         }
@@ -189,54 +147,38 @@ fn run_starways_warp<B: ratatui::backend::Backend>(
         // JOURNEY LOOP STATE UPDATE
         let elapsed = phase_timer.elapsed().as_secs_f32();
         match phase {
-            WarpPhase::Arrived => {
-                current_speed = 0.0;
-                // Gentle orbital floating
-                planet_y = planet_target_y + (time * 1.1).sin() * 0.5;
+            WarpPhase::SublightCruise => {
+                current_speed = 0.0; // stars stay stationary/twinkle
 
-                if elapsed > 5.5 {
-                    phase = WarpPhase::HyperspaceEntry;
+                if elapsed > 6.0 {
+                    phase = WarpPhase::WarpEngage;
                     phase_timer = Instant::now();
                 }
             }
-            WarpPhase::HyperspaceEntry => {
+            WarpPhase::WarpEngage => {
                 let ratio = (elapsed / 1.5).min(1.0);
-                // Accelerate rapidly
-                current_speed = ratio * 85.0;
-
-                // Planet flies downwards off-screen
-                planet_y += 35.0 * delta;
+                current_speed = ratio * 85.0; // accelerate
 
                 if elapsed > 1.5 {
-                    phase = WarpPhase::HyperspaceCruising;
+                    phase = WarpPhase::WarpCruising;
                     phase_timer = Instant::now();
                 }
             }
-            WarpPhase::HyperspaceCruising => {
-                current_speed = 85.0;
+            WarpPhase::WarpCruising => {
+                current_speed = 85.0; // full warp speed
 
-                if elapsed > 6.5 {
-                    phase = WarpPhase::HyperspaceExit;
+                if elapsed > 7.0 {
+                    phase = WarpPhase::WarpExit;
                     phase_timer = Instant::now();
-
-                    // Swap planet index for arrival
-                    planet_idx = (planet_idx + 1) % PLANETS.len();
-                    // Spawn new planet high above the screen
-                    planet_y = -12.0;
                 }
             }
-            WarpPhase::HyperspaceExit => {
+            WarpPhase::WarpExit => {
                 let ratio = (elapsed / 1.5).min(1.0);
-                // Decelerate rapidly
-                current_speed = (1.0 - ratio) * 85.0;
-
-                // New planet glides down into resting orbital position
-                planet_y += (planet_target_y - planet_y) * 4.2 * delta;
+                current_speed = (1.0 - ratio) * 85.0; // decelerate
 
                 if elapsed > 1.5 {
-                    phase = WarpPhase::Arrived;
+                    phase = WarpPhase::SublightCruise;
                     phase_timer = Instant::now();
-                    planet_y = planet_target_y;
                 }
             }
         }
@@ -255,6 +197,51 @@ fn run_starways_warp<B: ratatui::backend::Backend>(
             }
         }
 
+        // Calculate spaceship positions
+        let mut ship_x = center_x - SHIP_WIDTH as f32 / 2.0;
+        // Floating motion during sublight, vibrating jitter during warp
+        let mut ship_y = center_y - SHIP_HEIGHT as f32 / 2.0;
+
+        if phase == WarpPhase::SublightCruise {
+            ship_y += (time * 1.5).sin() * 1.2;
+        } else if current_speed > 10.0 {
+            // Jitter vibration
+            ship_x += if rng.random_bool(0.45) { rng.random_range(-1..=1) as f32 } else { 0.0 };
+            ship_y += if rng.random_bool(0.45) { rng.random_range(-1..=1) as f32 } else { 0.0 };
+        }
+
+        // Spawn engine flame particles
+        let spawn_rate = if current_speed > 10.0 { 4 } else { 1 };
+        for _ in 0..spawn_rate {
+            let nozzle_offsets = [-3.0f32, -1.0, 1.0, 3.0];
+            let offset = nozzle_offsets[rng.random_range(0..4)];
+            let px = ship_x + 10.0 + offset + rng.random::<f32>() * 0.6 - 0.3;
+            let py = ship_y + 9.2;
+
+            let vx = rng.random::<f32>() * 0.8 - 0.4;
+            let vy = if current_speed > 10.0 {
+                rng.random::<f32>() * 12.0 + 9.0 // high energy warp flare
+            } else {
+                rng.random::<f32>() * 3.5 + 1.5 // low energy sublight flicker
+            };
+
+            flames.push(FlameParticle {
+                x: px,
+                y: py,
+                vx,
+                vy,
+                life: 1.0,
+            });
+        }
+
+        // Update flame particles
+        for f in &mut flames {
+            f.x += f.vx * delta;
+            f.y += f.vy * delta;
+            f.life -= if current_speed > 10.0 { delta * 2.8 } else { delta * 6.5 };
+        }
+        flames.retain(|f| f.life > 0.0);
+
         // Render
         terminal.draw(|f| {
             let area = f.area();
@@ -272,7 +259,7 @@ fn run_starways_warp<B: ratatui::backend::Backend>(
             // fov perspective scaling
             let fov = area.width as f32 * 0.45;
 
-            // 2. Draw stars & star streaks (depending on speed)
+            // 2. Draw stars & star streaks
             for star in &stars {
                 let x_curr = center_x + (star.x / star.z) * fov;
                 let y_curr = center_y + (star.y / star.z) * fov * 0.55;
@@ -281,13 +268,13 @@ fn run_starways_warp<B: ratatui::backend::Backend>(
                 let py = y_curr as u16;
 
                 if current_speed < 1.0 {
-                    // Warp is inactive (Arrived): Draw twinkling stationary stars
+                    // Sublight cruise (stationary/twinkling stars)
                     if px < area.width && py < area.height {
                         let h = (star.x.abs().wrapping_to_u32() ^ star.y.abs().wrapping_to_u32()) as f32;
                         let sparkle = ((time * 1.5 + h).sin() + 1.0) * 0.5;
 
                         if sparkle > 0.15 {
-                            let intensity = (80.0 + sparkle * 175.0) as u8;
+                            let intensity = (70.0 + sparkle * 185.0) as u8;
                             let ch = if star.z < 25.0 { '✦' } else if star.z < 65.0 { '•' } else { '.' };
                             let cell = &mut buf[(px, py)];
                             cell.set_symbol(&ch.to_string());
@@ -295,7 +282,7 @@ fn run_starways_warp<B: ratatui::backend::Backend>(
                         }
                     }
                 } else {
-                    // Warp is active: Draw star streaks
+                    // Warp streaks
                     let z_prev = star.z + current_speed * delta;
                     let x_prev = center_x + (star.x / z_prev) * fov;
                     let y_prev = center_y + (star.y / z_prev) * fov * 0.55;
@@ -315,7 +302,6 @@ fn run_starways_warp<B: ratatui::backend::Backend>(
                                 let intensity = 1.0 - (star.z / 100.0);
                                 let color_ratio = t * intensity;
 
-                                // Streaks shift from deep blue to white-hot at front
                                 let r = (color_ratio * 220.0) as u8;
                                 let g = (90.0 + color_ratio * 165.0) as u8;
                                 let b = 255;
@@ -323,13 +309,13 @@ fn run_starways_warp<B: ratatui::backend::Backend>(
                                 let cell = &mut buf[(sx, sy)];
                                 let ch = if step == steps - 1 { '*' } else { '.' };
 
-                                // Avoid overwriting where the logo center is
-                                let is_logo_center = sx >= (area.width.saturating_sub(logo_width) / 2)
-                                    && sx < (area.width.saturating_sub(logo_width) / 2) + logo_width
-                                    && sy >= (area.height.saturating_sub(logo_height) / 2)
-                                    && sy < (area.height.saturating_sub(logo_height) / 2) + logo_height;
+                                // Avoid overwriting where the ship is
+                                let is_ship_zone = sx >= ship_x as u16
+                                    && sx < ship_x as u16 + SHIP_WIDTH
+                                    && sy >= ship_y as u16
+                                    && sy < ship_y as u16 + SHIP_HEIGHT;
 
-                                if !is_logo_center {
+                                if !is_ship_zone {
                                     cell.set_symbol(&ch.to_string());
                                     cell.set_style(Style::default().fg(Color::Rgb(r, g, b)));
                                 }
@@ -339,50 +325,62 @@ fn run_starways_warp<B: ratatui::backend::Backend>(
                 }
             }
 
-            // 3. Draw planet destination (if on screen)
-            let p_art = PLANETS[planet_idx];
-            let p_color = PLANET_COLORS[planet_idx];
-            let px_start = planet_x as i16;
-            let py_start = planet_y as i16;
+            // 3. Draw engine flame particles
+            for f in &flames {
+                let fx = f.x as u16;
+                let fy = f.y as u16;
 
-            for (row, line) in p_art.iter().enumerate() {
-                let py = py_start + row as i16;
-                if py >= 0 && py < area.height as i16 {
-                    for (col, ch) in line.chars().enumerate() {
-                        if ch == ' ' { continue; }
-                        let px = px_start + col as i16;
-                        if px >= 0 && px < area.width as i16 {
-                            let cell = &mut buf[(px as u16, py as u16)];
-                            cell.set_symbol(&ch.to_string());
-                            cell.set_style(Style::default().fg(p_color));
-                        }
-                    }
+                if fx < area.width && fy < area.height {
+                    let cell = &mut buf[(fx, fy)];
+                    let (r, g, b) = if current_speed > 10.0 {
+                        // Warp engine: hot electric blue-white flame
+                        let l = f.life;
+                        ((l * 180.0) as u8, (120.0 + l * 135.0) as u8, 255)
+                    } else {
+                        // Sublight engine: flickering orange-red flame
+                        let l = f.life;
+                        (255, (l * 120.0) as u8, 0)
+                    };
+
+                    let ch = if f.life > 0.65 { '*' } else if f.life > 0.35 { '+' } else { '.' };
+                    cell.set_symbol(&ch.to_string());
+                    cell.set_style(Style::default().fg(Color::Rgb(r, g, b)));
                 }
             }
 
-            // 4. Draw Logo in center (vibrates slightly at high speed)
-            let jitter_x = if current_speed > 10.0 && rng.random_bool(0.4) { rng.random_range(-1..=1) } else { 0 };
-            let jitter_y = if current_speed > 10.0 && rng.random_bool(0.4) { rng.random_range(-1..=1) } else { 0 };
+            // 4. Draw OMARA Spaceship
+            let sx_start = ship_x as i16;
+            let sy_start = ship_y as i16;
 
-            let logo_x = (area.width.saturating_sub(logo_width) / 2) as i16 + jitter_x;
-            let logo_y = (area.height.saturating_sub(logo_height) / 2) as i16 + jitter_y;
+            for (row, line) in SHIP_ART.iter().enumerate() {
+                let py = sy_start + row as i16;
+                if py >= 0 && py < area.height as i16 {
+                    for (col, ch) in line.chars().enumerate() {
+                        if ch == ' ' { continue; }
+                        let px = sx_start + col as i16;
+                        if px >= 0 && px < area.width as i16 {
+                            let cell = &mut buf[(px as u16, py as u16)];
 
-            for (y_offset, line) in logo_lines.iter().enumerate() {
-                let py = logo_y + y_offset as i16;
-                if py < 0 || py >= area.height as i16 { continue; }
+                            // Color design:
+                            // Hull: Steel Blue/Grey
+                            // OMARA Text: Electric white-blue
+                            // Wings/Details: Cyan
+                            let color = if row == 4 && col >= 8 && col <= 12 {
+                                Color::Rgb(225, 248, 255) // Logo
+                            } else if row == 5 || row == 6 {
+                                Color::Rgb(0, 220, 255) // Inner panels
+                            } else {
+                                Color::Rgb(105, 125, 150) // Outer hull
+                            };
 
-                for (x_offset, ch) in line.chars().enumerate() {
-                    if ch == ' ' { continue; }
-                    let px = logo_x + x_offset as i16;
-                    if px < 0 || px >= area.width as i16 { continue; }
-
-                    let cell = &mut buf[(px as u16, py as u16)];
-                    cell.set_symbol(&ch.to_string());
-                    
-                    // Electric white-blue glow
-                    cell.set_style(cell.style()
-                        .fg(Color::Rgb(225, 248, 255))
-                        .add_modifier(Modifier::BOLD));
+                            cell.set_symbol(&ch.to_string());
+                            let mut style = Style::default().fg(color);
+                            if (row == 4 && col >= 8 && col <= 12) || row == 0 {
+                                style = style.add_modifier(Modifier::BOLD);
+                            }
+                            cell.set_style(style);
+                        }
+                    }
                 }
             }
         })?;
@@ -395,7 +393,7 @@ fn run_starways_warp<B: ratatui::backend::Backend>(
     }
 }
 
-// Simple helper trait to get numeric values without compiling warnings
+// Helper trait to convert coordinate types safely
 trait F32Ext {
     fn wrapping_to_u32(self) -> u32;
 }
