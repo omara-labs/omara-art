@@ -59,24 +59,25 @@ generate_watermark() {
 
 # Generate throbber frames (dots animation)
 generate_throbber() {
-    local frames=11
+    local frames=10
     local size=128
     local dot_size=24
     local spacing=20
     local dot_color="$RED"
     local active_dot_color="$RED_BRIGHT"
-    local y_offset=48  # Vertically center between OMARA and bottom
+    local y_offset=40  # Vertically center between OMARA bottom and screen bottom
     
-    echo "🎬 Generating $frames throbber frames..."
+    echo "🎬 Generating $frames throbber frames (back-and-forth dots)..."
     
-    # Patterns: O●oooo, oO●ooo, ooO●oo, oooO●o, ooooO●, ooooO●, oooO●o, ooo●oo, oo●ooo, o●oooo, ●ooooo
+    # Patterns: back-and-forth animation
+    # Forward: ●ooooo → o●oooo → oo●ooo → ooo●oo → oooo●o
+    # Back:     oooo●o → ooo●oo → oo●ooo → o●oooo
     local patterns=(
         "●ooooo"
         "o●oooo"
         "oo●ooo"
         "ooo●oo"
         "oooo●o"
-        "ooooo●"
         "oooo●o"
         "ooo●oo"
         "oo●ooo"

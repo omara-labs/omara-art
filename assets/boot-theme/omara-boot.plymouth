@@ -1,20 +1,20 @@
 [Plymouth Theme]
 Name=Omara Boot
-Description=Futuristic neon boot theme for Omara Labs
+Description=Omara Niri boot theme with ASCII logo and dots animation
 ModuleName=two-step
 
 [two-step]
-Font=Cantarell 12
-TitleFont=Cantarell Light 30
+Font=JetBrains Mono 12
+TitleFont=JetBrains Mono 30
 ImageDir=/usr/share/plymouth/themes/omara-boot
 DialogHorizontalAlignment=.5
-DialogVerticalAlignment=.382
+DialogVerticalAlignment=.5
 TitleHorizontalAlignment=.5
-TitleVerticalAlignment=.382
+TitleVerticalAlignment=.5
 HorizontalAlignment=.5
-VerticalAlignment=.68
+VerticalAlignment=.81
 WatermarkHorizontalAlignment=.5
-WatermarkVerticalAlignment=.42
+WatermarkVerticalAlignment=.35
 Transition=fade
 TransitionDuration=0.5
 BackgroundStartColor=0x000000
