@@ -7,13 +7,15 @@ All screensavers live here: `~/Projects/omara/screensavers/`
 
 ## Available Screensavers
 
-| Binary            | Style                              | Color Palette       | Vibe |
-|-------------------|------------------------------------|---------------------|------|
-| `omara-matrix`    | Digital rain that settles into logo | Green               | Classic Omarchy |
-| `omara-beams`     | Sweeping vertical beams / spotlights | Vibrant Purple      | Elegant, modern |
-| `omara-unstable`  | Chaotic explode outward → dramatic snap back | Orange → Purple     | Explosive & satisfying |
-| `omara-pour`      | Glyphs cascade/pour from above and build the logo | Cyan / Light Blue   | Liquid, building |
+| Binary            | Style                                      | Color Palette          | Vibe                     |
+|-------------------|--------------------------------------------|------------------------|--------------------------|
+| `omara-bounce`    | Classic DVD-style bouncing Omara logo      | Cycling (purple/cyan/yellow/green/pink) | **Finished & polished**  |
+| `omara-matrix`    | Digital rain that settles into logo        | Green                  | Classic Omarchy          |
+| `omara-beams`     | Sweeping vertical beams / spotlights       | Vibrant Purple         | Elegant, modern          |
+| `omara-unstable`  | Chaotic explode outward → dramatic snap back | Orange → Purple      | Explosive & satisfying   |
+| `omara-pour`      | Glyphs cascade/pour from above and build the logo | Cyan / Light Blue | Liquid, building         |
 
+**`omara-bounce`** is currently the only screensaver considered complete and production-ready.  
 More coming (Fire, Synthgrid, Swarm, Laser Etch, etc.).
 
 ## Building
@@ -35,7 +37,8 @@ cargo build --release
 ```bash
 cd ~/Projects/omara/screensavers
 
-# Try them all
+# Try them all (bounce is the finished DVD-style one)
+./target/release/omara-bounce
 ./target/release/omara-matrix
 ./target/release/omara-beams
 ./target/release/omara-unstable
