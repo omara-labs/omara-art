@@ -73,7 +73,6 @@ See the other repositories in the [omara-labs](https://github.com/omara-labs) or
 - [omara-os](https://github.com/omara-labs/omara-os)
 - [omara-cli](https://github.com/omara-labs/omara-cli)
 - [omara-configs](https://github.com/omara-labs/omara-configs)
-- [omara-apps](https://github.com/omara-labs/omara-apps)
 - [omara-rpms](https://github.com/omara-labs/omara-rpms)
 
 ---
