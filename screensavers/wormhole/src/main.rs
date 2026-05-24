@@ -1,5 +1,5 @@
-// omara-wormhole - Fully self-contained Star Wars hyperspace fly-through.
-// Streaking stars, swirling blue warp tunnel, vibrating logo, and occasional majestic space whales (Purrgil).
+// omara-wormhole - Fully self-contained Star Trek / Star Wars warp speed screensaver.
+// Clean star warp streaks against solid black space, logo cockpit vibration, and planet-to-planet hyperspace journey.
 
 use crossterm::{
     event::{self, Event},
@@ -38,24 +38,50 @@ struct TunnelStar {
     z: f32,
 }
 
-// ASCII Art of the majestic bioluminescent space whale (Purrgil)
-const WHALE_ART: &[&str] = &[
-    r"       .---.                                                 ",
-    r"    .-'     '--..___                                         ",
-    r"   /   o   x        `''---...___                             ",
-    r"  |  X                          `''--.._                     ",
-    r"   \          .____..---.               `'-._                ",
-    r"    '.      .'           \  \  \             '.              ",
-    r"      '----'              \  \  \    ~~ ~      |             ",
-    r"                           \  \  \  ~~~~~     /              ",
-    r"                            \__\__\ ~~~~    .'               ",
-    r"                             (~~~)  ~~~   .-'                ",
-    r"                              \  \       /                   ",
-    r"                               \__\     |                    ",
+// Compact, clean ASCII planets representing space destinations
+const PLANETS: &[&[&str]] = &[
+    &[
+        r"          .------.          ",
+        r"        .-' .--. '-.        ",
+        r"      ./  ./    \.  \.      ",
+        r"   ===|  |        |  |===   ",
+        r"      '\  '\    /'  /'      ",
+        r"        '-. '--' .-'        ",
+        r"           '------'         ",
+    ],
+    &[
+        r"         .------.         ",
+        r"       .-'  ()  '-.       ",
+        r"      /  ()    ()  \      ",
+        r"     |              |     ",
+        r"     |   ()    ()   |     ",
+        r"      \            /      ",
+        r"       '-.______.-'       ",
+    ],
+    &[
+        r"         .------.         ",
+        r"       .-'  ~~  '-.       ",
+        r"      /  ~~    ~   \      ",
+        r"     |  ~  ~~~~     |     ",
+        r"     |   ~~~~~      |     ",
+        r"      \    ~       /      ",
+        r"       '-.______.-'       ",
+    ],
 ];
 
-const WHALE_WIDTH: i16 = 60;
-const WHALE_HEIGHT: i16 = 12;
+const PLANET_COLORS: &[Color] = &[
+    Color::Rgb(240, 155, 30),  // Orange ringed gas giant
+    Color::Rgb(150, 150, 150), // Grey cratered rocky moon
+    Color::Rgb(0, 180, 240),   // Cyan/blue ocean planet
+];
+
+#[derive(PartialEq, Clone, Copy)]
+enum WarpPhase {
+    Arrived,
+    HyperspaceEntry,
+    HyperspaceCruising,
+    HyperspaceExit,
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     terminal::enable_raw_mode()?;
@@ -66,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     execute!(terminal.backend_mut(), crossterm::cursor::Hide)?;
 
-    let result = run_hyperspace(&mut terminal);
+    let result = run_starways_warp(&mut terminal);
 
     execute!(
         terminal.backend_mut(),
@@ -83,7 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run_hyperspace<B: ratatui::backend::Backend>(
+fn run_starways_warp<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let logo = load_branding();
@@ -95,12 +121,15 @@ fn run_hyperspace<B: ratatui::backend::Backend>(
 
     let mut stars: Vec<TunnelStar> = Vec::new();
 
-    // Space whale state
-    let mut whale_x = 0.0f32;
-    let mut whale_y = 0.0f32;
-    let mut show_whale = false;
-    let mut whale_dir = true; // true = left-to-right, false = right-to-left
-    let mut next_whale_time = Instant::now() + Duration::from_secs(4); // spawn first whale quickly
+    // Hyperspace journey state machine
+    let mut phase = WarpPhase::Arrived;
+    let mut phase_timer = Instant::now();
+    let mut current_speed;
+    let mut planet_idx = 0;
+
+    let mut planet_x = 0.0f32;
+    let mut planet_y = 0.0f32;
+    let mut planet_target_y = 0.0f32;
 
     let mut last_frame = Instant::now();
     let start_time = Instant::now();
@@ -134,7 +163,6 @@ fn run_hyperspace<B: ratatui::backend::Backend>(
         if width != last_width || height != last_height {
             stars.clear();
 
-            // Star counts scale with screen area
             let target_stars = (width as usize * 3 / 2).clamp(60, 200);
             for _ in 0..target_stars {
                 let theta = rng.random::<f32>() * std::f32::consts::TAU;
@@ -146,6 +174,11 @@ fn run_hyperspace<B: ratatui::backend::Backend>(
                 });
             }
 
+            // Align planet on left side
+            planet_x = (width as f32 * 0.10).clamp(2.0, 15.0);
+            planet_target_y = height as f32 / 2.0 - 3.5;
+            planet_y = planet_target_y;
+
             last_width = width;
             last_height = height;
         }
@@ -153,42 +186,66 @@ fn run_hyperspace<B: ratatui::backend::Backend>(
         let center_x = width as f32 / 2.0;
         let center_y = height as f32 / 2.0;
 
-        // 1. Update space whale trajectory
-        if !show_whale && Instant::now() > next_whale_time {
-            show_whale = true;
-            whale_dir = rng.random_bool(0.5);
-            if whale_dir {
-                whale_x = -(WHALE_WIDTH as f32) - 5.0;
-            } else {
-                whale_x = width as f32 + 5.0;
+        // JOURNEY LOOP STATE UPDATE
+        let elapsed = phase_timer.elapsed().as_secs_f32();
+        match phase {
+            WarpPhase::Arrived => {
+                current_speed = 0.0;
+                // Gentle orbital floating
+                planet_y = planet_target_y + (time * 1.1).sin() * 0.5;
+
+                if elapsed > 5.5 {
+                    phase = WarpPhase::HyperspaceEntry;
+                    phase_timer = Instant::now();
+                }
             }
-            whale_y = center_y - (WHALE_HEIGHT as f32 / 2.0);
+            WarpPhase::HyperspaceEntry => {
+                let ratio = (elapsed / 1.5).min(1.0);
+                // Accelerate rapidly
+                current_speed = ratio * 85.0;
+
+                // Planet flies downwards off-screen
+                planet_y += 35.0 * delta;
+
+                if elapsed > 1.5 {
+                    phase = WarpPhase::HyperspaceCruising;
+                    phase_timer = Instant::now();
+                }
+            }
+            WarpPhase::HyperspaceCruising => {
+                current_speed = 85.0;
+
+                if elapsed > 6.5 {
+                    phase = WarpPhase::HyperspaceExit;
+                    phase_timer = Instant::now();
+
+                    // Swap planet index for arrival
+                    planet_idx = (planet_idx + 1) % PLANETS.len();
+                    // Spawn new planet high above the screen
+                    planet_y = -12.0;
+                }
+            }
+            WarpPhase::HyperspaceExit => {
+                let ratio = (elapsed / 1.5).min(1.0);
+                // Decelerate rapidly
+                current_speed = (1.0 - ratio) * 85.0;
+
+                // New planet glides down into resting orbital position
+                planet_y += (planet_target_y - planet_y) * 4.2 * delta;
+
+                if elapsed > 1.5 {
+                    phase = WarpPhase::Arrived;
+                    phase_timer = Instant::now();
+                    planet_y = planet_target_y;
+                }
+            }
         }
 
-        if show_whale {
-            let swim_speed = 13.5f32;
-            if whale_dir {
-                whale_x += swim_speed * delta;
-            } else {
-                whale_x -= swim_speed * delta;
-            }
-            // Gentle wave swimming motion
-            whale_y = center_y - (WHALE_HEIGHT as f32 / 2.0) - 2.0 + (time * 1.4).sin() * 2.5;
-
-            // Check if whale is fully off-screen
-            if (whale_dir && whale_x > width as f32 + 10.0)
-                || (!whale_dir && whale_x < -(WHALE_WIDTH as f32) - 10.0)
-            {
-                show_whale = false;
-                next_whale_time = Instant::now() + Duration::from_secs(rng.random_range(16..30));
-            }
-        }
-
-        // 2. Update tunnel stars (streaking forward)
-        let tunnel_speed = 82.0f32; // Hyperspace speed!
+        // Update star depths
         for star in &mut stars {
-            star.z -= tunnel_speed * delta;
+            star.z -= current_speed * delta;
 
+            // Reset stars that zoomed past
             if star.z <= 1.0 {
                 star.z = 100.0;
                 let theta = rng.random::<f32>() * std::f32::consts::TAU;
@@ -203,7 +260,7 @@ fn run_hyperspace<B: ratatui::backend::Backend>(
             let area = f.area();
             let buf = f.buffer_mut();
 
-            // 1. Clear background to solid black
+            // 1. Clear background to solid black space
             for y in 0..area.height {
                 for x in 0..area.width {
                     let cell = &mut buf[(x, y)];
@@ -215,94 +272,97 @@ fn run_hyperspace<B: ratatui::backend::Backend>(
             // fov perspective scaling
             let fov = area.width as f32 * 0.45;
 
-            // 2. Draw tunnel star streaks
+            // 2. Draw stars & star streaks (depending on speed)
             for star in &stars {
-                let z_prev = star.z + tunnel_speed * delta;
-
                 let x_curr = center_x + (star.x / star.z) * fov;
                 let y_curr = center_y + (star.y / star.z) * fov * 0.55;
 
-                let x_prev = center_x + (star.x / z_prev) * fov;
-                let y_prev = center_y + (star.y / z_prev) * fov * 0.55;
+                let px = x_curr as u16;
+                let py = y_curr as u16;
 
-                let dx = x_curr - x_prev;
-                let dy = y_curr - y_prev;
-                let dist = (dx*dx + dy*dy).sqrt();
+                if current_speed < 1.0 {
+                    // Warp is inactive (Arrived): Draw twinkling stationary stars
+                    if px < area.width && py < area.height {
+                        let h = (star.x.abs().wrapping_to_u32() ^ star.y.abs().wrapping_to_u32()) as f32;
+                        let sparkle = ((time * 1.5 + h).sin() + 1.0) * 0.5;
 
-                // Draw line from prev to curr
-                if dist > 0.5 && x_curr >= 0.0 && x_curr < area.width as f32 && y_curr >= 0.0 && y_curr < area.height as f32 {
-                    let steps = (dist as usize).clamp(2, 11);
-                    for step in 0..steps {
-                        let t = step as f32 / (steps - 1) as f32;
-                        let px = (x_prev + dx * t) as u16;
-                        let py = (y_prev + dy * t) as u16;
-
-                        if px < area.width && py < area.height {
-                            let intensity = 1.0 - (star.z / 100.0);
-                            let color_ratio = t * intensity;
-
-                            // Star streak colors (deep blue to bright white at head)
-                            let r = (color_ratio * 215.0) as u8;
-                            let g = (85.0 + color_ratio * 170.0) as u8;
-                            let b = 255;
-
+                        if sparkle > 0.15 {
+                            let intensity = (80.0 + sparkle * 175.0) as u8;
+                            let ch = if star.z < 25.0 { '✦' } else if star.z < 65.0 { '•' } else { '.' };
                             let cell = &mut buf[(px, py)];
-                            let ch = if step == steps - 1 { '*' } else { '.' };
+                            cell.set_symbol(&ch.to_string());
+                            cell.set_style(Style::default().fg(Color::Rgb(intensity, intensity, intensity + 20)));
+                        }
+                    }
+                } else {
+                    // Warp is active: Draw star streaks
+                    let z_prev = star.z + current_speed * delta;
+                    let x_prev = center_x + (star.x / z_prev) * fov;
+                    let y_prev = center_y + (star.y / z_prev) * fov * 0.55;
 
-                            // Avoid overwriting where the logo center is
-                            let is_logo_center = px >= (area.width.saturating_sub(logo_width) / 2)
-                                && px < (area.width.saturating_sub(logo_width) / 2) + logo_width
-                                && py >= (area.height.saturating_sub(logo_height) / 2)
-                                && py < (area.height.saturating_sub(logo_height) / 2) + logo_height;
+                    let dx = x_curr - x_prev;
+                    let dy = y_curr - y_prev;
+                    let dist = (dx*dx + dy*dy).sqrt();
 
-                            if !is_logo_center {
-                                cell.set_symbol(&ch.to_string());
-                                cell.set_style(cell.style().fg(Color::Rgb(r, g, b)));
+                    if dist > 0.5 && x_curr >= 0.0 && x_curr < area.width as f32 && y_curr >= 0.0 && y_curr < area.height as f32 {
+                        let steps = (dist as usize).clamp(2, 11);
+                        for step in 0..steps {
+                            let t = step as f32 / (steps - 1) as f32;
+                            let sx = (x_prev + dx * t) as u16;
+                            let sy = (y_prev + dy * t) as u16;
+
+                            if sx < area.width && sy < area.height {
+                                let intensity = 1.0 - (star.z / 100.0);
+                                let color_ratio = t * intensity;
+
+                                // Streaks shift from deep blue to white-hot at front
+                                let r = (color_ratio * 220.0) as u8;
+                                let g = (90.0 + color_ratio * 165.0) as u8;
+                                let b = 255;
+
+                                let cell = &mut buf[(sx, sy)];
+                                let ch = if step == steps - 1 { '*' } else { '.' };
+
+                                // Avoid overwriting where the logo center is
+                                let is_logo_center = sx >= (area.width.saturating_sub(logo_width) / 2)
+                                    && sx < (area.width.saturating_sub(logo_width) / 2) + logo_width
+                                    && sy >= (area.height.saturating_sub(logo_height) / 2)
+                                    && sy < (area.height.saturating_sub(logo_height) / 2) + logo_height;
+
+                                if !is_logo_center {
+                                    cell.set_symbol(&ch.to_string());
+                                    cell.set_style(Style::default().fg(Color::Rgb(r, g, b)));
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // 3. Draw space whale (Purrgil) with transparent background
-            if show_whale {
-                let wx_start = whale_x as i16;
-                let wy_start = whale_y as i16;
+            // 3. Draw planet destination (if on screen)
+            let p_art = PLANETS[planet_idx];
+            let p_color = PLANET_COLORS[planet_idx];
+            let px_start = planet_x as i16;
+            let py_start = planet_y as i16;
 
-                for (row, line) in WHALE_ART.iter().enumerate() {
-                    let py = wy_start + row as i16;
-                    if py < 0 || py >= area.height as i16 { continue; }
-
+            for (row, line) in p_art.iter().enumerate() {
+                let py = py_start + row as i16;
+                if py >= 0 && py < area.height as i16 {
                     for (col, ch) in line.chars().enumerate() {
                         if ch == ' ' { continue; }
-                        let px = wx_start + col as i16;
-                        if px < 0 || px >= area.width as i16 { continue; }
-
-                        let cell = &mut buf[(px as u16, py as u16)];
-
-                        // Swirly bioluminescent cycling colors: body cyan, tentacles purple
-                        let is_tentacle = ch == '~' || ch == '(' || ch == ')' || row > 8;
-                        let color = if is_tentacle {
-                            Color::Rgb(165, 30, 255) // bright cosmic purple
-                        } else {
-                            // pulsing cyan
-                            let pulse = ((time * 2.2).sin() + 1.0) * 0.5;
-                            let r = (pulse * 50.0) as u8;
-                            let g = (175.0 + pulse * 80.0) as u8;
-                            let b = (220.0 + pulse * 35.0) as u8;
-                            Color::Rgb(r, g, b)
-                        };
-
-                        cell.set_symbol(&ch.to_string());
-                        // Maintain the existing background color (warp tunnel lanes) to look semi-transparent!
-                        cell.set_style(cell.style().fg(color).add_modifier(Modifier::BOLD));
+                        let px = px_start + col as i16;
+                        if px >= 0 && px < area.width as i16 {
+                            let cell = &mut buf[(px as u16, py as u16)];
+                            cell.set_symbol(&ch.to_string());
+                            cell.set_style(Style::default().fg(p_color));
+                        }
                     }
                 }
             }
 
-            // 4. Draw Logo in the center with flight vibration/jitter
-            let jitter_x = if rng.random_bool(0.45) { rng.random_range(-1..=1) } else { 0 };
-            let jitter_y = if rng.random_bool(0.45) { rng.random_range(-1..=1) } else { 0 };
+            // 4. Draw Logo in center (vibrates slightly at high speed)
+            let jitter_x = if current_speed > 10.0 && rng.random_bool(0.4) { rng.random_range(-1..=1) } else { 0 };
+            let jitter_y = if current_speed > 10.0 && rng.random_bool(0.4) { rng.random_range(-1..=1) } else { 0 };
 
             let logo_x = (area.width.saturating_sub(logo_width) / 2) as i16 + jitter_x;
             let logo_y = (area.height.saturating_sub(logo_height) / 2) as i16 + jitter_y;
@@ -318,7 +378,8 @@ fn run_hyperspace<B: ratatui::backend::Backend>(
 
                     let cell = &mut buf[(px as u16, py as u16)];
                     cell.set_symbol(&ch.to_string());
-                    // Bright white-blue glow
+                    
+                    // Electric white-blue glow
                     cell.set_style(cell.style()
                         .fg(Color::Rgb(225, 248, 255))
                         .add_modifier(Modifier::BOLD));
@@ -331,5 +392,16 @@ fn run_hyperspace<B: ratatui::backend::Backend>(
         if let Some(remaining) = frame_time.checked_sub(elapsed_time) {
             std::thread::sleep(remaining);
         }
+    }
+}
+
+// Simple helper trait to get numeric values without compiling warnings
+trait F32Ext {
+    fn wrapping_to_u32(self) -> u32;
+}
+
+impl F32Ext for f32 {
+    fn wrapping_to_u32(self) -> u32 {
+        self as u32
     }
 }
