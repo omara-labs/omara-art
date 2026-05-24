@@ -59,9 +59,13 @@ Design assets are licensed under Creative Commons BY-SA 4.0 unless otherwise spe
 
 ## Related Repositories
 
-- [omara](https://github.com/omara-labs/omara) — Main OS repository
-- [omara-config](https://github.com/omara-labs/omara-config) — Default configurations
-- [omara-packages](https://github.com/omara-labs/omara-packages) — Packaging work
+See the other repositories in the [omara-labs](https://github.com/omara-labs) organization:
+
+- [omara-os](https://github.com/omara-labs/omara-os)
+- [omara-core](https://github.com/omara-labs/omara-core)
+- [omara-de](https://github.com/omara-labs/omara-de)
+- [omara-apps](https://github.com/omara-labs/omara-apps)
+- [omara-rpms](https://github.com/omara-labs/omara-rpms)
 
 ---
 
